@@ -1,2 +1,8 @@
 [deps]
+AbstractPlotting = "537997a7-5e4e-5d89-9595-2241ea00577e"
+GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
+ImageBinarization = "cbc4b850-ae4b-5111-9e64-df94c024a13d"
+ImageMagick = "6218d12a-5da1-5696-b52f-db25d2ecc6d1"
 Images = "916415d5-f1e6-5110-898d-aaa5f9f070e0"
+Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
+TestImages = "5e47fb64-e119-507b-a336-dd2b206d9990"
