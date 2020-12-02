@@ -2,3 +2,4 @@
 !.gitignore
 Manifest.toml
 *.tif
+*.h5

@@ -1,8 +1,10 @@
 [deps]
 AbstractPlotting = "537997a7-5e4e-5d89-9595-2241ea00577e"
 GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
+HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
 ImageBinarization = "cbc4b850-ae4b-5111-9e64-df94c024a13d"
 ImageMagick = "6218d12a-5da1-5696-b52f-db25d2ecc6d1"
+ImageMorphology = "787d08f9-d448-5407-9aad-5290dd7ab264"
 Images = "916415d5-f1e6-5110-898d-aaa5f9f070e0"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
-TestImages = "5e47fb64-e119-507b-a336-dd2b206d9990"
