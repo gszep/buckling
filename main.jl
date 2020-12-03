@@ -1,47 +1,63 @@
-using LinearAlgebra,SparseArrays
-using Images,ImageBinarization
+begin #################################### required libs
+    using LinearAlgebra,SparseArrays
+    using Images,ImageBinarization
 
-using ImageMorphology: opening!
-using GLMakie,Makie
+    using ImageMorphology: opening!
+    using AbstractPlotting.MakieLayout
+    using GLMakie,Makie
 
-include("lib/optimisation.jl")
-include("lib/utils.jl")
-const Δt = 15 # seconds
-
-#################################### load and binarize image
-#images = File("data/E2/M.h5",z=49:51)
-images = File("data/E2/M.tif")
-
-binaryImages = Array{Bool}(undef, size(images))
-binarize!(binaryImages,images,Otsu())
-
-#################################### apply sparse opening
-# sparse(binarize(File("ters.h5"), Otsu()))
-opening!(binaryImages) # scales like 19*Nz seconds
-
-function boundary( α::T, W::AbstractVector{T}) where T<:Number
-    k = 1:length(W)
-
-    r = 3/4+W'hermiteGaussian.(α,k,5)
-    return r*[cos(α),sin(α)]
+    include("lib/optimisation.jl")
+    include("lib/utils.jl")
 end
 
-parameters = [0.1,.1,.1,.1,.1,0,0,0,0,0.1]
-begin
-    t = slider( 1:size(M,4), sliderlength=700, position=(50,0), start=26, valueprinter=t->"$(round(Δt*t/60,digits=1)) min" )
-    imageₜ = lift(t[end].value) do i .~binaryImages[:,:,1,i] end
+begin #################################### load and binarize image
+    name = "E2/M.tif"
+    images = File(joinpath("data",name), Δr=[0.37μm,0.37μm,1.5μm], Δt=15s)
 
-    width,height,angle = range(-1,1,length=size(M,1)),range(-1,1,length=size(M,2)),range(-π,π,length=500)
-    Figure = image(width,height,imageₜ,show_axis=false,color=:black,transparency=true)
+    binaryImages = AxisArray( Array{Bool}(undef,size(images)), images.axes )
+    binarize!(binaryImages,images,Otsu())
 
-    lines!( hcat(boundary.(angle,Ref(parameters))...)', linewidth=3, color=:gold )
-    RecordEvents( hbox( Figure, vbox(t), parent = Scene(resolution=(800, 800))), "output" )
+    #################################### de-noise binarization
+    opening!(binaryImages,Tuple(1:ndims(images))) # convert to sparse(binaryImages) ?
+    printstyled(color=:green,"Preprocessing Done")
 end
 
-dataIdx = findall(binaryImages[:,:,1,26])[1:10:end]
-loss(dataIdx,parameters)
+function boundary( α::T, W::Vector{U}; origin::Vector{U}=[0.0μm,0.0μm], rotation::T=0.0, variance::T=0.01) where {T<:Number,U<:Quantity}
+    μ = range(-π/2,π/2,length=length(W)-1)
 
+    r = W[1] + sum( n-> W[n]*exp(-(α-μ[n-1])^2/variance), 2:length(W) )
+    return r*[cos(α-rotation),sin(α-rotation)] + origin
+end
 
+begin ################################################################## display image timeseries
+    parameters = [75μm; randn(100)μm]
+    ######################### define time slider
+    tSlider = slider( 1:nimages(images), sliderlength=700, position=(50,0), start=26,
+        valueprinter=tSlider->"$(round(mins,step(timeaxis(images))*tSlider,digits=2))" )
+    imageₜ = lift(tSlider[end].value) do i .~binaryImages[Axis{:t}(i),Axis{:z}(1)] end
+
+    #width,height,angle = range(-1,1,length=width(images)),range(-1,1,length=height(images)),
+    ######################### image sequence
+
+    scene, layout = layoutscene(resolution = (800, 800))
+    ax = layout[1, 1] = LAxis(scene, xlabel = "μm", ylabel = "μm")
+    
+    image!( ax,
+        map(x-> uconvert(μm,x).val, images.axes[axisdim(images,Axis{:x})]),
+        map(y-> uconvert(μm,y).val, images.axes[axisdim(images,Axis{:y})]),
+        imageₜ, color=:black )
+
+    ######################### boundary model
+    angles = range(-π,π,length=500)
+    boundary_positions = hcat(boundary.(angles,Ref(parameters))...)'
+    lines!( ax, ustrip(uconvert.(μm,boundary_positions)), linewidth=3, color=:gold )
+
+    ######################### render all
+    RecordEvents( hbox( scene, vbox(tSlider), parent = Scene(resolution=(800, 800)) ), "output" )
+end
+
+targets = findall(binaryImages[:,:,1,26])[1:10:end]
+loss(targets,parameters)
 
 
 
