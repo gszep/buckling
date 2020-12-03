@@ -42,3 +42,13 @@ function File(path::String; t=:, x=:, y=:, z=:, Δt=15s, Δr=(0.37μm,0.37μm,1.
         throw("allowed formats: single channel TIF (x,y,t) or HDF5 (x,y,z,t)")
     end
 end
+
+
+function targets( A::AxisArray{<:Bool}; downSample::Integer=10 )
+    targets = Vector{SVector{ndims(A),Float64}}()
+
+    for index ∈ findall(A)[1:downSample:end]
+        push!(targets, [ A.axes[k][index[k]].val for k ∈ 1:ndims(A) ] )
+    end
+    return targets
+end
