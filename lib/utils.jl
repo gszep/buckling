@@ -39,11 +39,12 @@ function File(path::String; t=:, x=:, y=:, z=:, Δt=15s, Δr=(0.37μm,0.37μm,1.
     )
 end
 
+using ForwardDiff: Dual
 function targets( A::AxisArray{<:Bool}; downSample::Integer=1 )
-    targets = Vector{SVector{ndims(A),Float64}}()
+    targets = Vector{Tuple{Vector{Float64},Vector{Dual}}}()
 
     for index ∈ findall(A)[1:downSample:end]
-        push!(targets, [ A.axes[k][index[k]].val for k ∈ 1:ndims(A) ] )
+        push!(targets, ( [A.axes[k][index[k]].val for k ∈ 1:ndims(A)], zeros(ndims(A)) ) )
     end
     return targets
 end

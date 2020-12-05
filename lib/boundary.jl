@@ -1,8 +1,17 @@
-function boundary( α::T; weights=[0.0], origin=[0.0,0.0], orientation=[75.0,0.0], variance=0.01) where T<:Number
+function boundary!( model::AbstractVector, α::T; weights=[0.0], origin=[0.0,0.0], 
+                    orientation=[75.0,0.0], variance=0.01) where T<:Number
+
     radius,rotation = orientation
+    N = length(weights)
+    r = radius + sum( n-> weights[n]*exp(-(α-(n/N-1/2)π)^2/variance), 1:N )
 
-    μ = length(weights) > 1 ? range(-π/2,π/2,length=length(weights)) : 0.0
-    r = radius + sum( n-> weights[n]*exp(-(α-μ[n])^2/variance), 1:length(weights) )
+    model[1] = r*cos(α-rotation) + origin[1]
+    model[2] = r*sin(α-rotation) + origin[2]
 
-    return r*[cos(α-rotation),sin(α-rotation)] + origin
+    return model
+end
+
+function boundary!( model::AbstractVector, data::AbstractVector; kwargs...)
+    α = atan(data[2],data[1])
+    return boundary!(model,α; kwargs...)
 end

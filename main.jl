@@ -1,7 +1,7 @@
 begin #################################### required libs
-    using LinearAlgebra,SparseArrays,StaticArrays
+    using LinearAlgebra,SparseArrays
     using Images,ImageBinarization
-    using Flux: Momentum,update!
+    using Flux
 
     using ImageMorphology: opening!,closing!
     using AbstractPlotting.MakieLayout
@@ -12,7 +12,7 @@ begin #################################### required libs
     include("lib/utils.jl")
 end
 
-begin #################################### load and binarize image
+@time begin #################################### load and binarize image
     name = "E2/M.tif"
     images = File(joinpath("data",name), z=40:60, Δr=[0.37μm,0.37μm,1.5μm], Δt=15s)
 
@@ -25,21 +25,28 @@ begin #################################### load and binarize image
     printstyled(color=:green,"Preprocessing Done")
 end
 
-begin ################################################################## optimise boundary
-    parameters = Dict( :weights => randn(50), :origin => [0.0,5.0], :orientation=>[75.0,0.0] )
-    optimiser = Momentum(1.0)
+@time begin ################################################################## optimise boundary
+    parameters = Dict( :weights => zeros(50), :origin => [0.0,5.0], :orientation=>[75.0,0.0] )
+    gradients =  Dict( :weights => zeros(50), :origin => [0.0,0.0], :orientation=>[0.0,0.0] )
 
     angles = range(-π,π,length=500)
-    boundaries = Array{Float64,2}[]
+    boundaries = [ zeros(length(angles),2) for t ∈ 1:nimages(images) ]
 
+    optimiser = Flux.Momentum(1.0)
     for t ∈ 1:nimages(images)
         dataₜ = targets(binaryImages[Axis{:z}(1),Axis{:t}(t)])
 
         for _ ∈ ( t>1 ? UnitRange{Int}(1,10) : UnitRange{Int}(1,100) )
-            update!(optimiser,parameters, ∇loss(dataₜ;parameters...) )
+
+            gradients!(gradients,dataₜ;parameters...)
+            Flux.update!(optimiser,parameters,gradients)
         end
-        push!( boundaries, hcat( boundary.(angles; parameters... )... )' )
+
+        for k ∈ 1:length(angles) # record solution
+            boundaries[t][k,:] = copy(boundary!( boundaries[t][k,:], angles[k]; parameters... ))
+        end
     end
+    printstyled(color=:blue,"Optimisation Done")
 end
 
 begin ################################################################## display image timeseries

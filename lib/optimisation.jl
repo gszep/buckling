@@ -1,25 +1,27 @@
-using ReverseDiff
-include("./patches/StaticArrays.jl")
+using ForwardDiff: gradient!
 
-function loss( x::StaticVector{2,T}; kwargs... ) where T<:Number
-    return log(norm( x - boundary(atan(x[2],x[1]);kwargs...) ) )
+function loss( x::Tuple{<:AbstractVector,<:AbstractVector}; kwargs... )
+    data,model = x
+    boundary!(model,data;kwargs...)
+    return log(norm( data - model ))
 end
 
-function loss( data::Vector{<:StaticVector}; kwargs... )
+function loss( data::Vector{<:Tuple{<:AbstractVector,<:AbstractVector}}; kwargs... )
     return sum( x->loss(x;kwargs...), data ) / length(data)
 end
 
-function ∇loss( data::Vector{<:StaticVector}; weights=[0.0], origin=[0.0,0.0], orientation=[75.0,0.0], kwargs... )
+function gradients!( gradients::Dict, data::Vector{<:Tuple{<:AbstractVector,<:AbstractVector}};
+         weights=[0.0], origin=[0.0,0.0], orientation=[75.0,0.0], kwargs... )
 
-    ∇weights = ReverseDiff.gradient(     θ->loss(data;weights=θ,origin=origin,orientation=orientation,kwargs... ), weights )
-    ∇origin = ReverseDiff.gradient(      θ->loss(data;weights=weights,origin=θ,orientation=orientation,kwargs...), origin  )
+    gradient!( gradients[:weights], θ->loss(data;weights=θ,origin=origin,orientation=orientation,kwargs...), weights )
+    gradient!( gradients[:origin],  θ->loss(data;weights=weights,origin=θ,orientation=orientation,kwargs...), origin  )
 
-    return Dict( :weights=>∇weights, :origin=>∇origin, :orientation=>[0.0,0.0] )
+    return gradients
 end
 
-import Flux: update!
-function update!(opt, x::Dict, x̄::Dict)
+import Flux
+function Flux.update!(opt, x::Dict, x̄::Dict)
     for key ∈ keys(x)
-        update!(opt,x[key],x̄[key])
+        Flux.update!(opt,x[key],x̄[key])
     end
 end
