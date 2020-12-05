@@ -2,7 +2,7 @@ begin #################################### required libs
     using LinearAlgebra,SparseArrays,StaticArrays
     using Images,ImageBinarization
 
-    using ImageMorphology: opening!
+    using ImageMorphology: opening!,closing!
     using AbstractPlotting.MakieLayout
     using GLMakie,Makie
 
@@ -12,32 +12,26 @@ begin #################################### required libs
 end
 
 begin #################################### load and binarize image
-    name = "E2/M.tif"
-    images = File(joinpath("data",name), Δr=[0.37μm,0.37μm,1.5μm], Δt=15s)
+    name = "E2/M.h5"
+    images = File(joinpath("data",name), z=48:52, Δr=[0.37μm,0.37μm,1.5μm], Δt=15s)
 
     binaryImages = AxisArray( Array{Bool}(undef,size(images)), images.axes )
     binarize!(binaryImages,images,Otsu())
+    region = Tuple(1:ndims(images)-1)
 
     #################################### de-noise binarization
-    opening!(binaryImages,Tuple(1:ndims(images))) # convert to sparse(binaryImages) ?
+    opening!(binaryImages,region); closing!(binaryImages,region) # convert to sparse(binaryImages) ?
     printstyled(color=:green,"Preprocessing Done")
 end
 
 begin ################################################################## display image timeseries
-
-    ######################### define time slider
-    tSlider = slider( 1:nimages(images), sliderlength=700, position=(50,0), start=26,
-        valueprinter=tSlider->"$(round(mins,step(timeaxis(images))*tSlider,digits=2))" )
-    imageₜ = lift(tSlider[end].value) do i .~binaryImages[Axis{:t}(i),Axis{:z}(1)] end
-
-    ######################### image sequence
     scene, layout = layoutscene(resolution = (800, 800))
-    ax = layout[1, 1] = LAxis(scene, xlabel = "μm", ylabel = "μm")
-    
-    image!( ax,
-        map(x-> uconvert(μm,x).val, images.axes[axisdim(images,Axis{:x})]),
-        map(y-> uconvert(μm,y).val, images.axes[axisdim(images,Axis{:y})]),
-        imageₜ, color=:black )
+    tSlider = layout[1,1] = LSlider( scene, range=1:nimages(images), startvalue=26 )
+    ax = layout[2,1] = LScene(scene, camera = cam3d!, raw = false, xlabel = "μm", ylabel = "μm")
+
+    ######################### scatter binarized image
+    dataₜ = lift(tSlider.value) do t map( x-> Point(x[1],x[2],x[3]), targets(binaryImages[Axis{:t}(t)]) ) end
+    meshscatter!( ax, dataₜ, color = :darkblue, markersize = 1 )
 
     ######################### boundary model
     angles = range(-π,π,length=500)
@@ -47,7 +41,7 @@ begin ################################################################## display
     lines!( ax, ustrip(uconvert.(μm,boundary_positions)), linewidth=3, color=:gold )
 
     ######################### render all
-    RecordEvents( hbox( scene, vbox(tSlider), parent = Scene(resolution=(800, 800)) ), "output" )
+    RecordEvents( scene, "output" )
 end
 
 data = targets(binaryImages[Axis{:z}(1),Axis{:t}(26)])
