@@ -9,18 +9,17 @@ function loss( data::Vector{<:StaticVector}; kwargs... )
     return sum( x->loss(x;kwargs...), data ) / length(data)
 end
 
-function ∇loss( data::Vector{<:StaticVector}; weights=[0.0], origin=[0.0,0.0], radius=75.0, rotation=0.0, kwargs... )
-    return ReverseDiff.gradient( θ->loss(data;weights=θ,origin=origin,radius=radius,rotation=rotation, kwargs...), weights )
+function ∇loss( data::Vector{<:StaticVector}; weights=[0.0], origin=[0.0,0.0], orientation=[75.0,0.0], kwargs... )
+
+    ∇weights = ReverseDiff.gradient(     θ->loss(data;weights=θ,origin=origin,orientation=orientation,kwargs... ), weights )
+    ∇origin = ReverseDiff.gradient(      θ->loss(data;weights=weights,origin=θ,orientation=orientation,kwargs...), origin  )
+
+    return Dict( :weights=>∇weights, :origin=>∇origin, :orientation=>[0.0,0.0] )
 end
 
-
-
-# function loss( x::T, y::T; kwargs... ) where T<:Quantity
-#     x = images.axes[axisdim(images,Axis{:x})].val[index.I[1]]
-#     y = images.axes[axisdim(images,Axis{:y})].val[index.I[2]]
-#     return norm( [x,y] - boundary(atan(y,x);kwargs...) )
-# end
-
-# function loss( indexes::Vector{CartesianIndex{2}}; kwargs... )
-#     return sum( idx -> loss(idx;kwargs...), indexes ) / length(indexes)
-# end
+import Flux: update!
+function update!(opt, x::Dict, x̄::Dict)
+    for key ∈ keys(x)
+        update!(opt,x[key],x̄[key])
+    end
+end

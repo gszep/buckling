@@ -39,7 +39,6 @@ function File(path::String; t=:, x=:, y=:, z=:, Δt=15s, Δr=(0.37μm,0.37μm,1.
     )
 end
 
-
 function targets( A::AxisArray{<:Bool}; downSample::Integer=1 )
     targets = Vector{SVector{ndims(A),Float64}}()
 

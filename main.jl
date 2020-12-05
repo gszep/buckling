@@ -1,6 +1,7 @@
 begin #################################### required libs
     using LinearAlgebra,SparseArrays,StaticArrays
     using Images,ImageBinarization
+    using Flux: Momentum,update!
 
     using ImageMorphology: opening!,closing!
     using AbstractPlotting.MakieLayout
@@ -24,6 +25,23 @@ begin #################################### load and binarize image
     printstyled(color=:green,"Preprocessing Done")
 end
 
+begin ################################################################## optimise boundary
+    parameters = Dict( :weights => randn(50), :origin => [0.0,5.0], :orientation=>[75.0,0.0] )
+    optimiser = Momentum(1.0)
+
+    angles = range(-π,π,length=500)
+    boundaries = Array{Float64,2}[]
+
+    for t ∈ 1:nimages(images)
+        dataₜ = targets(binaryImages[Axis{:z}(1),Axis{:t}(t)])
+
+        for _ ∈ ( t>1 ? UnitRange{Int}(1,10) : UnitRange{Int}(1,100) )
+            update!(optimiser,parameters, ∇loss(dataₜ;parameters...) )
+        end
+        push!( boundaries, hcat( boundary.(angles; parameters... )... )' )
+    end
+end
+
 begin ################################################################## display image timeseries
     scene, layout = layoutscene(resolution = (800, 800))
     tSlider = layout[1,1] = LSlider( scene, range=1:nimages(images), startvalue=26 )
@@ -35,19 +53,9 @@ begin ################################################################## display
     volume!( ax, x,y, minimum(z) ≠ maximum(z) ? z : range(-1,1,length=2), imageₜ)
 
     ######################### boundary model
-    angles = range(-π,π,length=500)
-    boundary_positions = hcat( boundary.(angles; weights=weights, radius=75.0, origin=[0.0,5] )... )'
-    lines!( ax, boundary_positions, linewidth=3, color=:gold )
+    boundaryₜ = lift(tSlider.value) do t boundaries[t] end
+    lines!( ax, boundaryₜ, linewidth=3, color=:gold )
 
     ######################### render all
     RecordEvents( scene, "output" )
-end
-
-data = targets(binaryImages[Axis{:z}(1),Axis{:t}(26)])
-using Flux: Momentum,update!
-
-optimiser = Momentum(1.0)
-for i ∈ 1:100
-    gradients = ∇loss(data;weights=weights,radius=75.0,origin=[0.0,5])
-    update!(optimiser,weights,gradients)
 end
