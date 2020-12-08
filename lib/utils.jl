@@ -20,7 +20,10 @@ function File(path::String; t=:, x=:, y=:, z=:, Δt=15s, Δr=(0.37μm,0.37μm,1.
 
     elseif occursin("tif",ext)
         A = channelview(load(path))
+        if ndims(A)==3 A = A[[CartesianIndex()],:,:,:] elseif ndims(A)==4 A = maximum(A,dims=1) end
         @assert(ndims(A)==4,"allowed formats: single channel TIF (x,y,t) or HDF5 (x,y,z,t)")
+
+        A = A[:,x,y,t]
         z = [CartesianIndex()] # single z-slice
 
     else 
@@ -46,5 +49,7 @@ function targets( A::AxisArray{<:Bool}; downSample::Integer=1 )
     for index ∈ findall(A)[1:downSample:end]
         push!(targets, ( [A.axes[k][index[k]].val for k ∈ 1:ndims(A)], zeros(ndims(A)) ) )
     end
+
+    @assert(length(targets)<10^5,"too many targets; increase downSample")
     return targets
 end
