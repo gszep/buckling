@@ -12,40 +12,94 @@ begin #################################### required libs
     include("lib/utils.jl")
 end
 
-@time begin #################################### load and binarize image
-    name = "E11/iM.tif"
-    images = File(joinpath("data",name), z=40:60, t=1:120, Δr=[0.37μm,0.37μm,1.5μm], Δt=15s)
+@time begin #################################### load images and fit spherical coordinates
+
+    image_axes = File("data/E2/M.tif", z=40:60, t=1:120, Δr=[0.37μm,0.37μm,1.5μm], Δt=15s).axes
+    images = AxisArray( StackedView(
+
+        File("data/E2/M.tif", z=40:60, t=1:120, Δr=[0.37μm,0.37μm,1.5μm], Δt=15s),
+        File("data/E2/U.tif", z=40:60, t=1:120, Δr=[0.37μm,0.37μm,1.5μm], Δt=15s)
+
+    ), Axis{:channel}([:M, :U]), image_axes...)
 
     binaryImages = AxisArray( Array{Bool}(undef,size(images)), images.axes )
     binarize!(binaryImages,images,Otsu())
-    region = Tuple(1:ndims(images))
 
-    #opening!(binaryImages,region); closing!(binaryImages,region) # convert to sparse(binaryImages) ?
     ############################################ fit spherical coordinate system
+    parameters = Dict( :weights => zeros(50), :coordinates => zeros(5) )
     coordinates = [ zeros(5) for t ∈ 1:nimages(images) ]
-    for t ∈ 1:nimages(images)
-        dataₜ = targets(binaryImages[Axis{:t}(t)])
-        ellipse!( coordinates[t], map(x->first(x)[1],dataₜ), map(x->first(x)[2],dataₜ), radius_offset = contains(name,"U") | contains(name,"iM") ? 15.0 : 0.0 )
-    end
+    angles = range(-π,π,length=500)
 
-    #################################### de-noise binarization
-    opening!(binaryImages,region); closing!(binaryImages,region) # convert to sparse(binaryImages) ?
+    boundaries = Dict(
+        :U=>[ zeros(length(angles),2) for t ∈ 1:nimages(images) ],
+        :M=>[ zeros(length(angles),2) for t ∈ 1:nimages(images) ]
+    )
+
+    for channel ∈ keys(boundaries)
+        for t ∈ 1:nimages(images)
+
+            dataₜ = targets(binaryImages[Axis{:channel}(channel),Axis{:t}(t)])
+            ellipse!( coordinates[t], map(x->first(x)[1],dataₜ), map(x->first(x)[2],dataₜ), radius_offset = (channel == :U) | (channel == :iM) ? 15.0 : 0.0 )
+
+            parameters[:coordinates] = coordinates[t]
+            for k ∈ 1:length(angles) # record solution
+                boundaries[channel][t][k,:] = copy(boundary!( boundaries[channel][t][k,:], angles[k]; parameters... ))
+            end
+        end
+    end
+end
+
+begin
+    ############################################################### plotting
+    scene, layout = layoutscene(resolution = (800,800))
+    slider = layout[1,1] = LSlider( scene, range=1:nimages(images), startvalue=26 )
+
+    menu = layout[2,1] = LMenu(scene, options = zip(["U","M"],[:U,:M]))
+    menu.selection.val = :M
+
+    ax = layout[3,1] = LScene(scene, camera = cam3d!)
+    t,channel = slider.value, menu.selection
+
+    ######################### show image volume
+    imageₜ = @lift( images[Axis{:channel}($channel),Axis{:t}($t)].data )
+    x,y,z,_ = ( range( extrema(ustrip(ax.val))..., length=2) for ax ∈ image_axes )
+    volume!( ax, x,y, minimum(z) ≠ maximum(z) ? z : range(-1,1,length=2), imageₜ)
+
+    ######################### boundary model
+    boundaryₜ = @lift( boundaries[$channel][$t] )
+    lines!( ax, boundaryₜ, linewidth=3, color=:gold )
+
+    ax = layout[3,2] = LAxis(scene, xlabel="Time [mins]", ylabel="Circumference [μm]")
+    boundaryLength = [ sum(sqrt.(sum(abs2.(diff(boundary,dims=1)),dims=2))) for boundary ∈ boundaries[:U] ]
+    u = lines!(ax, map( t->ustrip(uconvert(mins,t)), timeaxis(images) ), boundaryLength,
+        markersize=4, color=:gold)
+
+    boundaryLength = [ sum(sqrt.(sum(abs2.(diff(boundary,dims=1)),dims=2))) for boundary ∈ boundaries[:M] ]
+    m = lines!(ax, map( t->ustrip(uconvert(mins,t)), timeaxis(images) ), boundaryLength,
+        markersize=4, color=:blue)
+
+    tMins = @lift( ustrip(uconvert(mins,timeaxis(images)[$t])) )
+    vlines!(ax,tMins,linestyle=:dot)
+
+    layout[3,3] = LLegend(scene, [u,m], ["U", "M"])
     printstyled(color=:green,"Preprocessing Done")
+    RecordEvents( scene, "output" )
+    scene
 end
 
 @time begin ################################################################## optimise boundary
-    parameters = Dict( :weights => zeros(50), :coordinates => zeros(5) )
     gradients =  Dict( :weights => zeros(50) )
 
-    angles = range(-π,π,length=500)
-    boundaries = [ zeros(length(angles),2) for t ∈ 1:nimages(images) ]
+    #################################### de-noise binarization
+    region = Tuple(1:ndims(images))
+    opening!(binaryImages,region); closing!(binaryImages,region)
 
-    optimiser = Flux.Momentum(1.0)
     for t ∈ 1:nimages(images)
 
         dataₜ = targets(binaryImages[Axis{:z}(1),Axis{:t}(t)])
         parameters[:coordinates] = coordinates[t]
 
+        optimiser = Flux.Momentum(1.0)
         for _ ∈ UnitRange{Int}(1,50)
 
             gradient!( gradients[:weights], θ -> loss( dataₜ; weights=θ, coordinates=parameters[:coordinates] ), parameters[:weights] )
@@ -56,25 +110,17 @@ end
             boundaries[t][k,:] = copy(boundary!( boundaries[t][k,:], angles[k]; parameters... ))
         end
     end
-    printstyled(color=:blue,"Optimisation Done")
-end
 
-begin ################################################################## display image timeseries
-    scene, layout = layoutscene(resolution = (1024,512))
-    tSlider = layout[1,1] = LSlider( scene, range=1:nimages(images), startvalue=26 )
-    ax = layout[2,1] = LScene(scene, camera = cam3d!)
-
-    ######################### show image volume
-    imageₜ = lift(tSlider.value) do t images[Axis{:t}(t)].data end
-    x,y,z,_ = ( range( extrema(ustrip(ax.val))..., length=2) for ax ∈ images.axes )
-    volume!( ax, x,y, minimum(z) ≠ maximum(z) ? z : range(-1,1,length=2), imageₜ)
-
-    # dataₜ = lift(tSlider.value) do t map(x->Point(first(x)...),targets(binaryImages[Axis{:t}(t)])) end
-    # meshscatter!( ax, dataₜ, color=:gold, markersize=1)
-
-    ######################### boundary model
+    ############################################################### plotting
     boundaryₜ = lift(tSlider.value) do t boundaries[t] end
     lines!( ax, boundaryₜ, linewidth=3, color=:gold )
+
+    printstyled(color=:blue,"Optimisation Done")
+    RecordEvents( scene, "output" )
+    scene
+end
+
+begin ################################################################## display timeseries calculations
 
     ax = layout[2,2] = LAxis(scene, xlabel="Time [mins]", ylabel="Circumference [μm]")
     boundaryLength = [  sum(sqrt.(sum(abs2.(diff(boundary,dims=1)),dims=2))) for boundary ∈ boundaries ]
@@ -90,4 +136,5 @@ begin ################################################################## display
 
     ######################### render all
     RecordEvents( scene, "output" )
+    scene
 end
