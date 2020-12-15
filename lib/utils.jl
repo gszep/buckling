@@ -42,9 +42,18 @@ function File(path::String; t=:, x=:, y=:, z=:, Δt=15s, Δr=(0.37μm,0.37μm,1.
     )
 end
 
-using ForwardDiff: Dual
+function Files(path::String; t=:, x=:, y=:, z=:, Δt=15s, Δr=(0.37μm,0.37μm,1.5μm) )
+
+    @assert( ~occursin(".",path), "expecting folder of .tif files for each channel")
+    files = filter( file->endswith(file,".tif"), joinpath.( path, readdir(path)) )
+    image_axes = File( first(files), t=t, x=x, y=y, z=z, Δt=Δt, Δr=Δr ).axes
+
+    return AxisArray( StackedView([ File(file, t=t, x=x, y=y, z=z, Δt=Δt, Δr=Δr ) for file ∈ files ]...),
+        Axis{:channel}([ Symbol(basename(first(splitext(file)))) for file ∈ files ]), image_axes...)
+end
+
 function targets( A::AxisArray{<:Bool}; downSample::Integer=1 )
-    targets = Vector{Tuple{Vector{Float64},Vector{Dual}}}()
+    targets = Vector{Tuple{Vector{Float64},Vector{Float64}}}()
 
     for index ∈ findall(A)[1:downSample:end]
         push!(targets, ( [A.axes[k][index[k]].val for k ∈ 1:ndims(A)], zeros(ndims(A)) ) )
