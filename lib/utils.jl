@@ -53,10 +53,10 @@ function Files(path::String; t=:, x=:, y=:, z=:, Δt=15s, Δr=(0.37μm,0.37μm,1
 end
 
 function targets( A::AxisArray{<:Bool}; downSample::Integer=1 )
-    targets = Vector{Tuple{Vector{Float64},Vector{Float64}}}()
+    targets = Vector{Vector{Float64}}()
 
     for index ∈ findall(A)[1:downSample:end]
-        push!(targets, ( [A.axes[k][index[k]].val for k ∈ 1:ndims(A)], zeros(ndims(A)) ) )
+        push!(targets, [A.axes[k][index[k]].val for k ∈ 1:ndims(A)] )
     end
 
     @assert(length(targets)<10^5,"too many targets; increase downSample")

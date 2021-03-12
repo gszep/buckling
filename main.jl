@@ -3,8 +3,7 @@ begin #################################### required libs
     using Images,ImageBinarization
 
     using ImageMorphology: opening!,closing!
-    using AbstractPlotting.MakieLayout
-    using GLMakie,Makie
+    using AbstractPlotting, GLMakie
 
     include("lib/boundary.jl")
     include("lib/optimisation.jl")
@@ -29,27 +28,31 @@ end
 end
 
 begin ############################################################### plotting
-    scene, layout = layoutscene(resolution = (700,700))
-    ax = layout[3,1] = LScene(scene, camera = cam3d!)
 
-    slider = layout[1,1] = LSlider( scene, camera = cam3d!, range=1:nimages(images), startvalue=26 )
-    menu = layout[2,1] = LMenu(scene, options = [ (String(channel),channel) for channel ∈ first(images.axes) ] )
-
-    menu.selection.val = first(first(images.axes))
-    t,channel = slider.value, menu.selection
+    figure = Figure(resolution = (700,700))
+    ax = LScene( figure[2,1], camera = cam3d!)
+    colors = [ parse(RGBA,"#0000FF"), parse(RGBA,"#008000")]
 
     ######################### show image volume
-    imageₜ = @lift( images[Axis{:channel}($channel),Axis{:t}($t)].data )
+    t = figure[1,2] = Slider( figure, range=1:nimages(images), startvalue=26 )
     x,y,z,_ = ( range( extrema(ustrip(ax.val))..., length=2) for ax ∈ images.axes if eltype(ax) <: Quantity  )
-    volume!( ax, x,y, minimum(z) ≠ maximum(z) ? z : range(-1,1,length=2), imageₜ)
+
+    for (i,channel) ∈ enumerate(first(images.axes))
+        volume!( ax, x,y, minimum(z) ≠ maximum(z) ? z : range(-1,1,length=2),
+            @lift( images[Axis{:channel}(channel),Axis{:t}($(t.value))].data ),
+            colormap = cgrad( [ RGBA(0,0,0,0), colors[i] ], [0,eps(),1] ) )
+    end
 
     ######################### boundary model
     boundaries = boundary(parameters,weights)
-    lines!( ax, @lift( boundaries[$channel][$t] ), linewidth=3, color=:gold )
+    boundaries = Dict([ channel => map( x->x[150:end-150,:], boundaries[channel]) for channel ∈ keys(boundaries) ]) # drop out butthole
+    for (i,channel) ∈ enumerate(first(images.axes))
+        lines!( ax, @lift( boundaries[channel][$(t.value)] ), linewidth=3, color=colors[i] )
+    end
 
-    ax = layout[3,2] = LAxis(scene, xlabel="Time [mins]", ylabel="Circumference [μm]")
+    ######################### circumference
+    ax = figure[2,2] = AbstractPlotting.Axis(figure, xlabel="Time [mins]", ylabel="Circumference [μm]")
     circumferences = []
-    colors = [:gold,:blue]
     for (i,channel) ∈ enumerate(first(images.axes))
 
         boundaryLength = [ sum(sqrt.(sum(abs2.(diff(boundary,dims=1)),dims=2))) for boundary ∈ boundaries[channel] ]
@@ -57,15 +60,21 @@ begin ############################################################### plotting
         push!(circumferences,line)
     end
 
-    tMins = @lift( ustrip(uconvert(mins,timeaxis(images)[$t])) )
+    tMins = @lift( ustrip(uconvert(mins,timeaxis(images)[$(t.value)])) )
     vlines!(ax,tMins,linestyle=:dot)
 
-    layout[3,3] = LLegend(scene, circumferences, [String(channel) for channel ∈ first(images.axes)])
-    RecordEvents( scene, "output" )
-    scene
+    ######################### bucking
+    ax = figure[2,3] = AbstractPlotting.Axis(figure, xlabel="Angle [radians]", ylabel="Amplitude [μm]")
+    for (i,channel) ∈ enumerate(first(images.axes))
+        scatter!(ax, @lift( [angles[channel][$(t.value)] residuals[channel][$(t.value)]] ),
+        color=colors[i], markersize=2, strokewidth=0 )
+    end
+
+    figure[2,4] = Legend(figure, circumferences, [String(channel) for channel ∈ first(images.axes)])
+    figure
 end
 
 @time begin ################################################################## optimise boundary
-    weights = surface_modes(binaryImages,parameters)
+    weights,residuals,angles = surface_modes(binaryImages,parameters)
     printstyled(color=:green,"Surface Mode Regression Done")
 end

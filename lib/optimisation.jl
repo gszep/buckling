@@ -32,7 +32,7 @@ function ellipse( A::AxisArray{<:Bool}; kwargs... )
         for t ∈ 1:nimages(A)
 
             dataₜ = targets(A[Axis{:channel}(channel),Axis{:t}(t)])
-            ellipse!( parameters[channel][t], map(x->first(x)[1],dataₜ), map(x->first(x)[2],dataₜ);
+            ellipse!( parameters[channel][t], map(x->x[1],dataₜ), map(x->x[2],dataₜ);
                 radius_offset = (channel == :U) | (channel == :iM) ? 15.0 : 0.0,
                 kwargs... )
         end
@@ -43,6 +43,8 @@ end
 
 function surface_modes( A::AxisArray{<:Bool}, parameters::Dict{Symbol,Vector{Vector{T}}}; N = 50, variance=0.01, kwargs... ) where T<:Number
     weights = Dict([ channel=>[ zeros(N) for t ∈ 1:nimages(A) ] for channel ∈ first(A.axes) ])
+    residuals = Dict([ channel=>[ Float64[] for t ∈ 1:nimages(A) ] for channel ∈ first(A.axes) ])
+    angles = Dict([ channel=>[ Float64[] for t ∈ 1:nimages(A) ] for channel ∈ first(A.axes) ])
 
     for channel ∈ first(A.axes)
         for t ∈ 1:nimages(A)
@@ -50,13 +52,15 @@ function surface_modes( A::AxisArray{<:Bool}, parameters::Dict{Symbol,Vector{Vec
             dataₜ = targets(A[Axis{:channel}(channel),Axis{:t}(t),Axis{:z}(1)])
             R,X = parameters[channel][t][1:2], parameters[channel][t][3:4]
 
-            R = map( x -> norm(first(x)-X)-sum(R)/2, dataₜ )
-            α = map( x -> atan(first(x)[2]-X[2],first(x)[1]-X[1]), dataₜ )
+            R = map( x -> norm(x-X)-sum(R)/2, dataₜ )
+            α = map( x -> atan(x[2]-X[2],x[1]-X[1]), dataₜ )
             Φ = hcat(map( n-> exp.(-(α.-(n/N-1/2)π).^2/variance), 1:N )...)
 
             weights[channel][t] = (Φ'Φ+5I(N))\Φ'R
+            residuals[channel][t] = R
+            angles[channel][t] = α
         end
     end
 
-    return weights
+    return weights,residuals,angles
 end
