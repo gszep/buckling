@@ -131,6 +131,7 @@ begin ############################################################### show movie
                 save("output/$egg.ellipse-parameters.$channel.csv",ellipses)
             end
         end
+        printstyled(color=:blue,"Export Done\n")
     end
     movie
 end
