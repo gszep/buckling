@@ -100,7 +100,7 @@ begin ############################################################### show movie
             vlines!(ax,tMins,linestyle=:dot)
         
             ######################### bucking
-            ax = svg[1,2] = Axis(svg, xlabel="Vegetal Position [radians]", ylabel="Buckling Amplitude [μm]", xgridvisible=false, ygridvisible=false)
+            ax = svg[1,2] = CairoMakie.Axis(svg, xlabel="Vegetal Position [radians]", ylabel="Buckling Amplitude [μm]", xgridvisible=false, ygridvisible=false)
             for (i,channel) ∈ enumerate(first(images.axes))
                 scatter!(ax, @lift( [angles[channel][$(t.value)] residuals[channel][$(t.value)]] ),
                 color=colors[i], markersize=2, strokewidth=0 )
