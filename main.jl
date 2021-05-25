@@ -5,9 +5,7 @@ end
 
 begin #################################### required libs
     using ImageMorphology: opening!,closing!
-    using AbstractPlotting: Axis
-
-    using GLMakie, CairoMakie
+    using GLMakie,CairoMakie
     using DataFrames
 
     using LinearAlgebra,SparseArrays
@@ -84,7 +82,7 @@ begin ############################################################### show movie
             svg = Figure(resolution = (1000,500))
         
             ######################### boundary length
-            ax = svg[1,1] = Axis(svg, xlabel="Time [mins]", ylabel="Vegetal Boundary Length [μm]", xgridvisible=false, ygridvisible=false)
+            ax = svg[1,1] = CairoMakie.Axis(svg, xlabel="Time [mins]", ylabel="Vegetal Boundary Length [μm]", xgridvisible=false, ygridvisible=false)
             legend,lengths = [], DataFrame()
 
             time = map( t->ustrip(uconvert(mins,t)), timeaxis(images) )
