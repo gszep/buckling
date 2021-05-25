@@ -14,6 +14,7 @@ begin #################################### required libs
     using Images,ImageBinarization
 
     using ImageMorphology: opening!,closing!
+    using AbstractPlotting: @lift
     using AbstractPlotting, GLMakie, CairoMakie
     using DataFrames
 
