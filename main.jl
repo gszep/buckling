@@ -14,7 +14,6 @@ begin #################################### required libs
     using Images,ImageBinarization
 
     using ImageMorphology: opening!,closing!
-    using AbstractPlotting: @lift
     using AbstractPlotting, GLMakie, CairoMakie
     using DataFrames
 
@@ -49,20 +48,20 @@ end
 
 begin ############################################################### show movie
     GLMakie.activate!()
-    movie = Figure(resolution = (500,700))
+    movie = AbstractPlotting.Figure(resolution = (500,700))
 
-    ax = LScene( movie[2,1:2], scenekw = ( camera = cam3d!, show_axis=false, show_grid=false ))
+    ax = AbstractPlotting.LScene( movie[2,1:2], scenekw = ( camera = AbstractPlotting.cam3d!, show_axis=false, show_grid=false ))
     colors = [ parse(RGBA,"#0000FF"), parse(RGBA,"#008000")]
 
     ######################### show image volume
-    timeSlider = labelslider!(movie, "Time", 1:nimages(images); format = i -> "$(round(i*step(timeaxis(images)).val/60,digits=2)) mins", startvalue=26)
+    timeSlider = AbstractPlotting.labelslider!(movie, "Time", 1:nimages(images); format = i -> "$(round(i*step(timeaxis(images)).val/60,digits=2)) mins", startvalue=26)
     t, movie[3,1] = timeSlider.slider, timeSlider.layout
 
     x,y,z,_ = ( range( extrema(ustrip(ax.val))..., length=2) for ax ∈ images.axes if eltype(ax) <: Quantity  )
     for (i,channel) ∈ enumerate(first(images.axes))
 
-        volume!( ax, x,y, minimum(z) ≠ maximum(z) ? z : range(-1,1,length=2),
-            @lift( images[Axis{:channel}(channel),Axis{:t}($(t.value))].data ),
+        AbstractPlotting.volume!( ax, x,y, minimum(z) ≠ maximum(z) ? z : range(-1,1,length=2),
+            AbstractPlotting.@lift( images[Axis{:channel}(channel),Axis{:t}($(t.value))].data ),
             colormap = cgrad( [ RGBA(0,0,0,0), colors[i] ], [0,eps(),1] ) )
     end
 
@@ -73,20 +72,20 @@ begin ############################################################### show movie
     legend = []
     for (i,channel) ∈ enumerate(first(images.axes))
     
-        line = lines!( ax, @lift( boundaries[channel][$(t.value)] ), linewidth=3, color=colors[i] )
+        line = AbstractPlotting.lines!( ax, AbstractPlotting.@lift( boundaries[channel][$(t.value)] ), linewidth=3, color=colors[i] )
         push!(legend,line)
     end
 
-    movie[3,2] = Legend(movie, legend,
+    movie[3,2] = AbstractPlotting.Legend(movie, legend,
         [String(channel) for channel ∈ first(images.axes)], framevisible = false)
 
-    button = Button(movie[1,1:2], label = "Export")
+    button = AbstractPlotting.Button(movie[1,1:2], label = "Export")
     on(button.clicks) do event
         save("output/$egg@t=$(round(t.value[]*step(timeaxis(images)).val/60,digits=2))mins.png",movie)
 
         begin ############################################################### save statistics
             CairoMakie.activate!()
-            svg = Figure(resolution = (1000,500))
+            svg = AbstractPlotting.Figure(resolution = (1000,500))
         
             ######################### boundary length
             ax = svg[1,1] = AbstractPlotting.Axis(svg, xlabel="Time [mins]", ylabel="Vegetal Boundary Length [μm]", xgridvisible=false, ygridvisible=false)
@@ -99,21 +98,21 @@ begin ############################################################### show movie
                 boundaryLength = [ sum(sqrt.(sum(abs2.(diff(boundary,dims=1)),dims=2))) for boundary ∈ boundaries[channel] ]
                 lengths[!,"$channel [μm]"] = boundaryLength
 
-                line = lines!(ax, time, boundaryLength, color=colors[i] )
+                line = AbstractPlotting.lines!(ax, time, boundaryLength, color=colors[i] )
                 push!(legend,line)
             end
         
-            tMins = @lift( ustrip(uconvert(mins,timeaxis(images)[$(t.value)])) )
-            vlines!(ax,tMins,linestyle=:dot)
+            tMins = AbstractPlotting.@lift( ustrip(uconvert(mins,timeaxis(images)[$(t.value)])) )
+            AbstractPlotting.vlines!(ax,tMins,linestyle=:dot)
         
             ######################### bucking
             ax = svg[1,2] = AbstractPlotting.Axis(svg, xlabel="Vegetal Position [radians]", ylabel="Buckling Amplitude [μm]", xgridvisible=false, ygridvisible=false)
             for (i,channel) ∈ enumerate(first(images.axes))
-                scatter!(ax, @lift( [angles[channel][$(t.value)] residuals[channel][$(t.value)]] ),
+                AbstractPlotting.scatter!(ax, AbstractPlotting.@lift( [angles[channel][$(t.value)] residuals[channel][$(t.value)]] ),
                 color=colors[i], markersize=2, strokewidth=0 )
             end
         
-            svg[1,3] = Legend(svg, legend, [String(channel) for channel ∈ first(images.axes)], framevisible = false)
+            svg[1,3] = AbstractPlotting.Legend(svg, legend, [String(channel) for channel ∈ first(images.axes)], framevisible = false)
             save("output/$egg@t=$(round(t.value[]*step(timeaxis(images)).val/60,digits=2))mins.svg",svg)
             GLMakie.activate!()
 
